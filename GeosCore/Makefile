@@ -378,8 +378,7 @@ aerosol_mod.o               : aerosol_mod.F90                                \
 
 carbon_mod.o                : carbon_mod.F90                                 \
                               diag_mod.o              drydep_mod.o           \
-                              pbl_mix_mod.o                                  \
-                              tomas_mod.o             vdiff_pre_mod.o        \
+                              pbl_mix_mod.o           tomas_mod.o            \
                               hco_interface_mod.o     aerosol_mod.o
 
 calc_met_mod.o              : calc_met_mod.F90
@@ -511,8 +510,7 @@ gc_environment_mod.o        : gc_environment_mod.F90                         \
                               ocean_mercury_mod.o     pops_mod.o             \
                               seasalt_mod.o           sulfate_mod.o          \
                               tagged_co_mod.o         tagged_o3_mod.o        \
-                              toms_mod.o                                     \
-                              vdiff_pre_mod.o
+                              toms_mod.o
 
 get_met_mod.o               : get_met_mod.F90                                \
                               hco_interface_mod.o
@@ -524,7 +522,7 @@ global_br_mod.o             : global_br_mod.F90                              \
 
 global_ch4_mod.o            : global_ch4_mod.F90                             \
                               diag_mod.o              diag_oh_mod.o          \
-                              vdiff_pre_mod.o         hco_interface_mod.o
+                              hco_interface_mod.o
 
 gosat_ch4_mod.o             : gosat_ch4_mod.F90
 
@@ -587,16 +585,16 @@ mercury_mod.o               : mercury_mod.F90                                \
                               calc_met_mod.o                                 \
                               depo_mercury_mod.o      diag03_mod.o           \
                               diag_mod.o              drydep_mod.o           \
-                              global_br_mod.o         vdiff_pre_mod.o        \
-                              land_mercury_mod.o      hco_interface_mod.o    \
-                              ocean_mercury_mod.o     pbl_mix_mod.o
+                              global_br_mod.o         land_mercury_mod.o     \
+	                      hco_interface_mod.o     ocean_mercury_mod.o    \
+	                      pbl_mix_mod.o
 
 mixing_mod.o                : mixing_mod.F90                                 \
                               diagnostics_mod.o                              \
                               diag_mod.o              drydep_mod.o           \
                               hcoi_gc_main_mod.o      get_ndep_mod.o         \
-                              pbl_mix_mod.o                                  \
-                              hco_interface_mod.o     vdiff_mod.o
+                              pbl_mix_mod.o           hco_interface_mod.o    \
+	                      vdiff_mod.o
 
 modis_lai_mod.o             : modis_lai_mod.F90                              \
                               hco_interface_mod.o
@@ -640,7 +638,7 @@ planeflight_mod.o           : planeflight_mod.F90                            \
 pops_mod.o           	    : pops_mod.F90   	                             \
 			      diag_mod.o	      diag53_mod.o           \
                               drydep_mod.o            pbl_mix_mod.o	     \
-                              vdiff_pre_mod.o         hco_interface_mod.o
+                              hco_interface_mod.o
 
 RnPbBe_mod.o                : RnPbBe_mod.F90                                 \
                               diag_mod.o              hco_interface_mod.o
@@ -655,8 +653,7 @@ rpmares_mod.o               : rpmares_mod.F90                                \
 seasalt_mod.o               : seasalt_mod.F90                                \
                               diag_mod.o              drydep_mod.o           \
                               pbl_mix_mod.o           tomas_mod.o            \
-                              apm_driv_mod.o          vdiff_pre_mod.o        \
-                              hco_interface_mod.o
+                              apm_driv_mod.o          hco_interface_mod.o
 
 
 set_global_ch4_mod.o        : set_global_ch4_mod.F90                         \
@@ -675,8 +672,8 @@ sulfate_mod.o               : sulfate_mod.F90                                \
                               get_ndep_mod.o          apm_driv_mod.o         \
                               pbl_mix_mod.o           wetscav_mod.o          \
                               ucx_mod.o               uvalbedo_mod.o         \
-                              vdiff_pre_mod.o         wetscav_mod.o          \
-                              hco_interface_mod.o     tomas_mod.o
+                              wetscav_mod.o           hco_interface_mod.o    \
+	                      tomas_mod.o
 
 tagged_co_mod.o             : tagged_co_mod.F90                              \
                               pbl_mix_mod.o           hco_interface_mod.o    \
@@ -711,17 +708,11 @@ ucx_mod.o                   : ucx_mod.F90                                    \
 uvalbedo_mod.o              : uvalbedo_mod.F90                               \
                               hco_interface_mod.o
 
-vdiff_pre_mod.o             : vdiff_pre_mod.F90
-ifeq ($(COMPILER),sun)
-	$(F90) -O3 -c $<
-endif
-
 vdiff_mod.o                 : vdiff_mod.F90                                  \
                               calc_met_mod.o                                 \
                               depo_mercury_mod.o      diag_mod.o             \
                               drydep_mod.o            ocean_mercury_mod.o    \
-                              pbl_mix_mod.o           vdiff_pre_mod.o        \
-                              hco_interface_mod.o                            \
+                              pbl_mix_mod.o           hco_interface_mod.o    \
                               global_ch4_mod.o        mercury_mod.o
 
 wetscav_mod.o               : wetscav_mod.F90                                \
