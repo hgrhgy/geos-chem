@@ -4714,6 +4714,7 @@ CONTAINS
     USE State_Met_Mod,     ONLY : MetState
     USE Time_Mod,          ONLY : Get_Ts_Conv
     USE Time_Mod,          ONLY : Get_Ts_Emis
+    USE UnitConv_Mod,      ONLY : Convert_Spc_Units
 !
 ! !INPUT PARAMETERS:
 !
@@ -4755,12 +4756,10 @@ CONTAINS
     REAL(fp)                :: tmpFlx
 
     ! Strings
+    CHARACTER(LEN=63)       :: origUnit
     CHARACTER(LEN=255)      :: errMsg,  thisLoc
 
     ! Arrays
-    REAL(fp), TARGET        :: sflx(State_Grid%NX,                           &
-                                    State_Grid%NY,                           &
-                                    State_Chm%nAdvect                       )
     REAL(fp), TARGET        :: eflx(State_Grid%NX,                           &
                                     State_Grid%NY,                           &
                                     State_Chm%nAdvect                       )
@@ -4782,15 +4781,32 @@ CONTAINS
     RC      =  GC_SUCCESS
     dflx    =  0.0_fp
     eflx    =  0.0_fp
-    sflx    =  0.0_fp
     spc     => State_Chm%Species(:,:,1,1:State_Chm%nAdvect)
     ThisSpc => NULL()
     errMsg  = ''
     thisLoc = &
     ' -> at Compute_Sflx_for_Vdiff (in module GeosCore/hcoi_gc_main_mod.F90)'
 
+    ! Reset DryDepMix diagnostic so as not to accumulate from prior timesteps
+    IF ( State_Diag%Archive_DryDepMix .or. State_Diag%Archive_DryDep ) THEN
+       State_Diag%DryDepMix = 0.0_f4
+    ENDIF
+
     !=======================================================================
-    ! First-time setup: Get pointers to the PARANOX loss fluxes. 
+    ! Convert units to v/v dry
+    !=======================================================================
+    CALL Convert_Spc_Units( Input_Opt, State_Chm, State_Grid, State_Met,     &
+                            'v/v dry', RC,        OrigUnit=OrigUnit         )
+
+    ! Trap potential error
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Error encountred in "Convert_Spc_Units" (to v/v dry)!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
+    !=======================================================================
+    ! First-time setup: Get pointers to the PARANOX loss fluxes.
     ! These are stored in diagnostics 'PARANOX_O3_DEPOSITION_FLUX' and
     ! 'PARANOX_HNO3_DEPOSITION_FLUX'. The call below links pointers
     ! PNOXLOSS_O3 and PNOXLOSS_HNO3 to the data values stored in the
@@ -4838,6 +4854,11 @@ CONTAINS
     ! For more information, please see this wiki page:
     ! http://wiki.geos-chem.org/Distributing_emissions_in_the_PBL
     !========================================================================
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED )                                                  &
+    !$OMP PRIVATE( I,       J,            topMix,     NA,     N             )&
+    !$OMP PRIVATE( thisSpc, tmpflx,       found,      emis,   dep           )&
+    !$OMP PRIVATE( ND,      fracNoHg0Dep, zeroHg0Dep, Hg_cat                )
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
 
@@ -4846,10 +4867,10 @@ CONTAINS
 
        ! Loop over advected species
        DO NA = 1, State_Chm%nAdvect
-       
+
           ! Get the modelId
           N = State_Chm%Map_Advect(NA)
-          
+
           ! Point to the corresponding entry in the species database
           ThisSpc => State_Chm%SpcData(N)%Info
 
@@ -4866,7 +4887,7 @@ CONTAINS
              ! and/or all other source types, we could use the HEMCO internal
              ! values set above and would not need the code below.
              ! Units are already in kg/m2/s. (ckeller, 10/21/2014)
-             ! 
+             !
              !%%% NOTE: MAYBE THIS CAN BE REMOVED SOON (bmy, 5/18/19)%%%
              eflx(I,J,NA) = CH4_EMIS(I,J,NA)
 
@@ -4880,7 +4901,7 @@ CONTAINS
              eflx(I,J,NA) = HG_EMIS(I,J,NA)
 
           ELSE
-             
+
              ! Compute emissions for all other simulation
              tmpFlx = 0.0_fp
              DO L = 1, topMix
@@ -4895,8 +4916,8 @@ CONTAINS
           !------------------------------------------------------------------
           ! Also add drydep frequencies calculated by HEMCO (e.g. from the
           ! air-sea exchange module) to DFLX.  These values are stored
-          ! in 1/s.  They are added in the same manner as the DEPSAV values 
-          ! from drydep_mod.F90.  DFLX will be converted to kg/m2/s later. 
+          ! in 1/s.  They are added in the same manner as the DEPSAV values
+          ! from drydep_mod.F90.  DFLX will be converted to kg/m2/s later.
           ! (ckeller, 04/01/2014)
           !------------------------------------------------------------------
           CALL GetHcoVal( NA, I, J, 1, found=found, dep=dep )
@@ -4933,8 +4954,8 @@ CONTAINS
           ! only use the lowest model layer for calculating drydep fluxes
           ! given that spc is in v/v
           dflx(I,J,N) = dflx(I,J,N) &
-                      + State_Chm%DryDepSav(I,J,ND) * spc(I,J,N) /           &
-                      ( AIRMW                       / ThisSpc%EmMW_g        )
+                      + State_Chm%DryDepSav(I,J,ND) * spc(I,J,N)             &
+                      /  ( AIRMW                    / ThisSpc%EmMW_g        )
 
 
           IF ( Input_Opt%ITS_A_MERCURY_SIM .and. ThisSpc%Is_Hg0 ) THEN
@@ -4962,10 +4983,10 @@ CONTAINS
        ! Convert DFLX from 1/s to kg/m2/s
        !
        ! If applicable, add PARANOX loss to this term. The PARANOX
-       ! loss term is already in kg/m2/s. PARANOX loss (deposition) is 
-       ! calculated for O3 and HNO3 by the PARANOX module, and data is 
-       ! exchanged via the HEMCO diagnostics.  The data pointers PNOXLOSS_O3 
-       ! and PNOXLOSS_HNO3 have been linked to these diagnostics at the 
+       ! loss term is already in kg/m2/s. PARANOX loss (deposition) is
+       ! calculated for O3 and HNO3 by the PARANOX module, and data is
+       ! exchanged via the HEMCO diagnostics.  The data pointers PNOXLOSS_O3
+       ! and PNOXLOSS_HNO3 have been linked to these diagnostics at the
        ! beginning of this routine (ckeller, 4/10/15).
        !=====================================================================
        dflx(I,J,:) = dflx(I,J,:) * State_Met%AD(I,J,1)                        &
@@ -4984,7 +5005,7 @@ CONTAINS
        !
        ! SFLX is what we need to pass into routine VDIFF
        !=====================================================================
-       sflx(I,J,:) = eflx(I,J,:) - dflx(I,J,:) ! kg/m2/s
+       State_Chm%SurfaceFlux(I,J,:) = eflx(I,J,:) - dflx(I,J,:) ! kg/m2/s
 
        !=====================================================================
        ! Archive Hg deposition for surface reservoirs (cdh, 08/28/09)
@@ -5033,16 +5054,15 @@ CONTAINS
 
     ENDDO
     ENDDO
+    !$OMP END PARALLEL DO
 
-    !IF ( prtDebug ) THEN
-    !   ! Print debug output for the advected species
-       write(*,*) 'eflx and dflx values HEMCO [kg/m2/s]'
-       do NA = 1, State_Chm%nAdvect
-          write(*,*) 'eflx TRACER ', NA, ': ', SUM(eflx(:,:,NA))
-          write(*,*) 'dflx TRACER ', NA, ': ', SUM(dflx(:,:,NA))
-          write(*,*) 'sflx TRACER ', NA, ': ', SUM(sflx(:,:,NA))
-       enddo
-    !ENDIF
+    !### Uncomment for debug output
+    !WRITE( 6, '(a)' ) 'eflx and dflx values HEMCO [kg/m2/s]'
+    !DO NA = 1, State_Chm%nAdvect
+    !   WRITE(6,*) 'eflx TRACER ', NA, ': ', SUM(eflx(:,:,NA))
+    !   WRITE(6,*) 'dflx TRACER ', NA, ': ', SUM(dflx(:,:,NA))
+    !   WRITE(6,*) 'sflx TRACER ', NA, ': ', SUM(State_Chm%SurfaceFlux(:,:,NA))
+    !ENDDO
 
     !=======================================================================
     ! DIAGNOSTICS: Compute drydep flux loss due to mixing [molec/cm2/s]
@@ -5051,13 +5071,14 @@ CONTAINS
     ! specialty simulations) are accounted for in species 1..nDrydep,
     ! so we don't need to do any further special handling.
     !=======================================================================
-    IF ( Input_Opt%LGTMM                   .or.                             &
-         Input_Opt%LSOILNOX                .or.                             &
-         State_Diag%Archive_DryDepMix      .or.                             &
-         State_Diag%Archive_DryDep       ) then
+    IF ( Input_Opt%LGTMM              .or. Input_Opt%LSOILNOX          .or.  &
+         State_Diag%Archive_DryDepMix .or. State_Diag%Archive_DryDep ) THEN
 
        ! Loop over only the drydep species
        ! If drydep is turned off, nDryDep=0 and the loop won't execute
+       !$OMP PARALLEL DO                                                     &
+       !$OMP DEFAULT( SHARED                                                )&
+       !$OMP PRIVATE( ND, N, ThisSpc, EmMw_kg, tmpFlx                       )
        DO ND = 1, State_Chm%nDryDep
 
           ! Get the species ID from the drydep ID
@@ -5120,7 +5141,7 @@ CONTAINS
           ! within subroutine (ewl, 1/25/16)
           !-----------------------------------------------------------------
 	  IF ( Input_Opt%LSOILNOX ) THEN
-             tmpFlx= 0.0_fp
+             tmpFlx = 0.0_fp
              DO J = 1, State_Grid%NY
              DO I = 1, State_Grid%NX
                 tmpFlx = dflx(I,J,N)                                         &
@@ -5135,10 +5156,23 @@ CONTAINS
 
           ! Free species database pointer
           ThisSpc => NULL()
-       ENDDO 
+       ENDDO
+       !$OMP END PARALLEL DO
     ENDIF
 
-    STOP
+    !=======================================================================
+    ! Unit conversion #2: Convert back to the original units
+    !=======================================================================
+    CALL Convert_Spc_Units( Input_Opt, State_Chm, State_Grid,                &
+                            State_Met, OrigUnit,  RC                        )
+
+    ! Trap potential errors
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Error encountred in "Convert_Spc_Units" (from v/v dry)!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
   END SUBROUTINE HCOI_Compute_Sflx_For_Vdiff
 !EOC
 END MODULE Hcoi_GC_Main_Mod
